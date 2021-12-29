@@ -8,38 +8,51 @@
     import Spinnner from "./lib/ui/spinnner.svelte";
     import type { NebulaChart, QlikStruc, NebulaRender } from "./types";
     import NebulaSelection from "./lib/components/NebulaSelection.svelte";
-    import { tick } from "svelte";
+    import { onMount, tick } from "svelte";
     import NebulaFilter from "./lib/components/NebulaFilter.svelte";
 
     let qlikInstance: EngineAPI.IApp;
+    let nebulaInstance: NebulaChart;
     let dim1: EngineAPI.IGenericListLayout;
+    let reload = false;
 
     const qlik: QlikEnterpriseConnection = new QlikEnterpriseConnection(config.host, config.virtualProxy, enigma, schema);
 
-    const establishConnection = async (): Promise<NebulaChart> => {
-        qlikInstance = await qlik.connectAndOpenDoc(config.appId);
-        await qlik.reloadScript();
-        tick();
+    onMount(async () => {
+        console.log("Open");
+        qlikInstance = await qlik.connectFilterApp(config.appId);
+        await tick();
         dim1 = await qlik.getAppFields("Dim1");
-        const nebulaComponent = new NebulaCharts(qlik.app);
+    });
 
-        return nebulaComponent.chart();
-    };
+    const templateReload = async (ev) => {
+        reload = false;
 
-    const updateField = async (ev) => {
-        console.log(ev);
-        await qlik.userScript(ev.detail.value);
+        await qlik.closeSession();
+        console.log("Session Closed");
+
+        const templateApp = await qlik.reloadTempApp(ev.detail.value, config.tmpAppId);
+        console.log(templateApp);
+        const nebulaComponent = new NebulaCharts(templateApp);
+
+        nebulaInstance = await nebulaComponent.chart();
+
+        reload = true;
     };
 </script>
 
 <main>
-    {#await establishConnection()}
+    {#if !dim1}
         <Spinnner />
-    {:then nebulaInstance}
-        <NebulaSelection nebula={nebulaInstance} />
-        <NebulaBar nebula={nebulaInstance} />
-        <NebulaFilter field={dim1.qListObject.qDataPages[0].qMatrix} fieldName={"Dim1"} on:fieldSelect={updateField} />
-    {/await}
+    {:else}
+        <NebulaFilter field={dim1.qListObject.qDataPages[0].qMatrix} fieldName={"Dim1"} on:reloadApp={templateReload} />
+        {#if reload}
+            <div>
+                <NebulaSelection nebula={nebulaInstance} />
+                <NebulaBar nebula={nebulaInstance} />
+            </div>
+        {/if}
+    {/if}
 </main>
 
 <style>
@@ -49,6 +62,10 @@
     }
     main {
         padding: 1em;
-        margin: 0 auto;
+        width: 100%;
+
+        display: flex;
+        flex-direction: column;
+        gap: 5rem;
     }
 </style>
