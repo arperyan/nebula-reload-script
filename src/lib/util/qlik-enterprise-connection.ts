@@ -1,8 +1,7 @@
-import { script, newScript } from "./script";
-
 export class QlikEnterpriseConnection {
     session: enigmaJS.ISession;
     global: EngineAPI.IGlobal;
+    filterApp: EngineAPI.IApp;
     app: EngineAPI.IApp;
 
     private enigmaConfig: enigmaJS.IConfig;
@@ -28,15 +27,14 @@ export class QlikEnterpriseConnection {
         return this.global;
     }
 
-    async connectAndOpenDoc(appId: string): Promise<EngineAPI.IApp> {
+    async connectFilterApp(appId: string): Promise<EngineAPI.IApp> {
         if (!appId) throw new Error(`Qlik Enterprise: "appId" is required`);
         await this.prepare(appId);
         this.session = this.enigma.create(this.enigmaConfig);
-        this.global = await this.session.open();
-        this.app = await this.global.openDoc(appId);
-        return this.app;
+        const filterGlobal: EngineAPI.IGlobal = await this.session.open();
+        this.filterApp = await filterGlobal.openDoc(appId);
+        return this.filterApp;
     }
-
     private async prepare(appId?: string): Promise<void> {
         const docId = appId ? appId : "engineData";
 
@@ -48,20 +46,27 @@ export class QlikEnterpriseConnection {
             url: `${eUrl}${vp}app/${docId}`,
         };
     }
-    async reloadScript() {
-        await this.app.setScript(newScript());
-        const result = await this.app.doReload();
 
+    async reloadTempApp(value: string[], id: string) {
+        this.global = await this.connect();
+
+        let tmpApp = await this.global.createSessionAppFromApp(id);
+
+        const getScript = await tmpApp.getScript();
+
+        const script = getScript.replace("${newValue}", this.createQlikMatch(value));
+
+        await tmpApp.setScript(script);
+        const result = await tmpApp.doReload();
         console.log("result", result);
+        return tmpApp;
     }
-    async userScript(value) {
-        if (value) {
-            const qScript = script(value);
-            await this.app.setScript(qScript);
-            const result = await this.app.doReload();
-            //await this.app.doSave();
-            console.log("result", result);
-        }
+    async closeSession() {
+        await this.session.close();
+    }
+    private createQlikMatch(value): string {
+        let res = value.reduce((previousValue, currentValue) => previousValue.concat(currentValue), "");
+        return res.split("").join("','");
     }
     async getAppFields(name): Promise<any> {
         let props = {
@@ -83,9 +88,9 @@ export class QlikEnterpriseConnection {
             },
         };
 
-        let obj = await this.app.createSessionObject(props);
+        let obj = await this.filterApp.createSessionObject(props);
         let objLayout = await obj.getLayout();
-        this.app.destroyObject(obj.id);
+        this.filterApp.destroyObject(obj.id);
         console.log(objLayout);
 
         return objLayout;
