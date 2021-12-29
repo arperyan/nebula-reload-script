@@ -1,33 +1,23 @@
 <script lang="ts">
-    import { onMount } from "svelte";
-    import type { NebulaRender, QlikStruc, NebulaChart } from "../../types";
+    import { onDestroy, onMount } from "svelte";
+    import type { NebulaRender, NebulaChart } from "../../types";
     import { fields } from "../util/data";
 
     export let nebula: NebulaChart;
 
     let element: HTMLDivElement;
+    let renderNebbie: NebulaRender;
 
-    onMount(() => {
-        let renderNebbie: NebulaRender;
-
-        const getNebula = async () => {
-            renderNebbie = await nebula.render({
-                element: element,
-                type: "bar",
-                //id: "",  //Qlik Object ID
-                fields: fields,
-                properties: {
-                    title: "Nebula",
-                },
-            });
-        };
-
-        getNebula();
-
-        return () => {
-            console.log("destroy");
-            renderNebbie.destroy();
-        };
+    onMount(async () => {
+        renderNebbie = await nebula.render({
+            element: element,
+            type: "bar",
+            //id: "",  //Qlik Object ID
+            fields: fields,
+            properties: {
+                title: "Nebula",
+            },
+        });
     });
 </script>
 
